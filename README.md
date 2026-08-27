@@ -1,5 +1,7 @@
 # Brighten Up Mart — Business Analytics Workshop
 
+[![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=Phudit-Ascendas/BU-BA-Workshop&project=BUBAWorkshop.prj&file=LowCode_MATLAB_Business_Analytics.mlx)
+
 A hands-on MATLAB workshop for **MG 410 Business Analytics for Strategic Decisions**, built around one
 fictional Thai retail chain, *Brighten Up Mart*: three regional distribution centres, five stores, and
 four years of monthly sales history.
