@@ -1,6 +1,6 @@
 # Brighten Up Mart — Business Analytics Workshop
 
-[![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=Phudit-Ascendas/BU-BA-Workshop&project=BUBAWorkshop.prj&file=LowCode_MATLAB_Business_Analytics.mlx)
+[![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=Phudit-Ascendas/BU-BA-Workshop&file=https://github.com/Phudit-Ascendas/BU-BA-Workshop/blob/master/LowCode_MATLAB_Business_Analytics.mlx)
 
 *MATLAB for Business Analytics: Forecasting, Optimization, and AI Agents*
 
