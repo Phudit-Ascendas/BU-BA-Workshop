@@ -27,11 +27,13 @@ or supply-chain manager faces every month:
 |---|---|
 | `LowCode_MATLAB_Business_Analytics.mlx` | **Main live script** — the taught workshop, with sections left blank for participants to fill in |
 | `Solution_LowCode_MATLAB_Business_Analytics.mlx` | The completed walkthrough, for reference after the session |
-| `BrightenUpMartDashboardApp.mlapp` | **Dashboard** — the interactive App Designer app the workshop ends on |
+| `BrightenUpMartAnalyticsApp.mlapp` | **Dashboard** — the interactive App Designer app the workshop ends on |
+| `BUBAWorkshop.prj` | MATLAB project file — open it to put this folder on the path |
 | `data/BrightenUpMartSales.csv` | 48 months of `Month, Sales, MarketingSpend` (Jan 2022 – Dec 2025) |
-| `data/BrightenUpMartSales_Features.csv` | The same history reshaped as supervised-learning features |
+| `data/BrightenUpMartSales_Features.csv` | The same history reshaped as supervised-learning features (36 rows, Jan 2023 – Dec 2025) |
 | `data/RbLin.mat` | Trained robust-linear model exported from Regression Learner (`RbLin.predictFcn`) |
 | `data/TransportOpt.xlsx` | Distribution-network scenario — sheets `Shipping Cost`, `Supply Share`, `Demand Share` |
+
 
 ## Requirements
 
@@ -42,7 +44,7 @@ or supply-chain manager faces every month:
 ## Getting started
 
 ```matlab
-cd <this folder>                            % scripts resolve data/ relative to the current folder
+cd <this folder>                            % the live script resolves data/ relative to the current folder
 open LowCode_MATLAB_Business_Analytics.mlx  % run sections top to bottom
 ```
 
@@ -50,11 +52,8 @@ The live script's final part opens the dashboard, so running it through takes yo
 finished tool. To skip straight to the dashboard:
 
 ```matlab
-BrightenUpMartDashboardApp
+BrightenUpMartAnalyticsApp
 ```
-
-Both resolve `data/` relative to the current folder, so `cd` into this folder rather than running the
-files from elsewhere.
 
 ## The live script
 
@@ -89,8 +88,9 @@ per month with four predictors:
 | `MarketingSpend` | budget planned for that month |
 
 **Preparing train and test data.** Because `SameMonthLastYear` needs a full year of run-up, the feature
-table starts in Jan 2023 and covers three years. The first two years become `BUS_train` and the third
-year becomes `BUS_test`, so the model is scored honestly on months it has never seen.
+table starts in Jan 2023 and covers three years. The first two years (rows 1–24, 2023–2024) become
+`BUS_train` and the third year (rows 25–36, 2025) becomes `BUS_test`, so the model is scored honestly on
+months it has never seen.
 
 **Training.** The model is fitted in the **Regression Learner app** — point-and-click, no training code —
 and exported to `data/RbLin.mat` as a robust linear fit. It can also be opened from the command line:
@@ -119,7 +119,8 @@ focusmkt = 4;   % which of those months gets the marketing push
 
 Planned marketing spend is drawn as `poissrnd(median(BUS.MarketingSpend(end-12:end)))` per month, and the
 focus month is replaced by `round(median + 2*std)` over that same trailing window — the promotional
-spike. `rng(7)` is fixed inside `createForecast`, so a demo reproduces the same numbers every time.
+spike. `rng(7)` is fixed inside `createForecast`, so a demo reproduces the same numbers every time. That
+trailing median is 44 with a standard deviation of 38.36, so the focus month's spend comes out at 121.
 
 With the default settings the forecast reads:
 
@@ -140,25 +141,35 @@ The focus month's forecast becomes that month's total demand: about **947 units 
 is now purely operational — given three distribution centres with limited capacity and five stores that
 must each receive their share, which routes meet every store's demand at the lowest total shipping cost?
 
-**Setting up the network.** The scenario is no longer hardcoded: three **Import Data Live Tasks** read
+**Setting up the network.** The scenario is not hardcoded: three **Import Data Live Tasks** read
 `data/TransportOpt.xlsx`.
 
 | Sheet | What it carries |
 |---|---|
 | `Shipping Cost` | 3 DCs × 5 stores of per-unit cost, in THB |
 | `Supply Share` | each DC's share of capacity — Bangkok 0.47, Chiang Mai 0.29, Hat Yai 0.24 |
-| `Demand Share` | each store's share of sales — 0.265, 0.217, 0.181, 0.169, 0.168 |
+| `Demand Share` | each store's share of sales — North 0.217, Central 0.265, East 0.181, South 0.169, Isaan 0.168 |
 
-Cost rises with distance — Bangkok DC is nearest the Central Store, Chiang Mai DC the North Store, Hat
-Yai DC the South Store. Total supply is set at 103% of total demand, and both vectors are rounded so
-their totals stay exact:
+Per-unit cost rises with distance, so every DC is cheapest into the store nearest it — Bangkok DC into
+the Central Store (600), Chiang Mai DC into the North Store (700), Hat Yai DC into the South Store (700):
+
+|  | North | Central | East | South | Isaan |
+|---|---|---|---|---|---|
+| **Bangkok DC** | 2000 | 600 | 900 | 2500 | 1500 |
+| **Chiang Mai DC** | 700 | 2000 | 2300 | 3700 | 1800 |
+| **Hat Yai DC** | 3700 | 2500 | 2600 | 700 | 2800 |
+
+Total supply is set at 103% of total demand — a buffer so the plan is not knife-edge:
 
 ```matlab
 totalDemand = round(forecastTbl.ForecastSales(focusmkt));   % 947
 totalSupply = ceil(totalDemand*1.03);                       % 976
 ```
 
-which gives store demand `[251 205 171 160 160]` against DC supply `[459 283 234]`.
+Splitting those totals by the shares and rounding rarely sums back to the total, so the remainder is
+pushed onto the **last store** and onto the **first DC**. The store demands must sum to `totalDemand`
+exactly, or the equality constraint in the next step cannot be satisfied. That gives store demand
+`[205 251 171 160 160]` against DC supply `[459 283 234]`.
 
 **Solving.** The **Optimize Live Task** states the decision in business terms — choose how many units to
 ship on each route, so that no DC ships beyond capacity, every store's demand is fully met, and total
@@ -167,21 +178,30 @@ the mathematically optimal plan rather than merely a good one:
 
 |  | North | Central | East | South | Isaan |
 |---|---|---|---|---|---|
-| **Bangkok DC** | 0 | 205 | 171 | 0 | 83 |
-| **Chiang Mai DC** | 251 | 0 | 0 | 0 | 32 |
+| **Bangkok DC** | 0 | 251 | 171 | 0 | 37 |
+| **Chiang Mai DC** | 205 | 0 | 0 | 0 | 78 |
 | **Hat Yai DC** | 0 | 0 | 0 | 160 | 45 |
+
+Every store is served from its cheapest centre, and only the Isaan Store — expensive from everywhere — is
+split three ways, soaking up whatever capacity is left over.
 
 **How much did optimization save?** `naiveAllocation` benchmarks the plan against a common real-world
 habit — allocating stock first-come, first-served, store by store, ignoring cost entirely. For April 2026
-that is **THB 872,700** optimized against **THB 1,919,100** naive: a saving of roughly **THB 1,046,400**,
-about **55%**, with no change to demand, supply, or prices. The annotated bar chart shows the gap.
+that is **THB 881,900** optimized against **THB 1,854,700** naive: a saving of roughly **THB 972,800**,
+about **52%**, with no change to demand, supply, or prices. The annotated bar chart shows the gap.
 
 ### Part 3 — AI agentics for data analytics and dashboard intelligence
 A forecast and an optimal shipping plan are only useful if the right people see them in time to act. The
-closing part covers two layers of business intelligence: the visual dashboard that summarizes everything
-at a glance, and an early look at **AI agents** — software that takes a plain-language business question
-and routes it to the right analysis automatically, the idea behind the AI copilots now appearing inside
-tools like Power BI and Tableau.
+plan is also optimal only *for the numbers supplied* — demand came from a forecast, so the honest
+follow-up question is how much the plan and the bill move if demand turns out five percent higher. That
+question is the reason the dashboard exists.
+
+The closing part covers two layers of business intelligence: the visual dashboard that summarizes
+everything at a glance, and an early look at **AI agents** — a language model plus *tools* plus a loop,
+which reads a plain-language business question, decides which analysis to run, and reports the answer,
+with every number still computed by MATLAB. It is the idea behind the AI copilots now appearing inside
+tools like Power BI and Tableau, and the **MATLAB Agentic AI toolkit** is what built the app this section
+opens.
 
 ### Appendix
 For anyone who wants the machinery rather than the buttons, the appendix holds:
@@ -194,65 +214,75 @@ For anyone who wants the machinery rather than the buttons, the appendix holds:
 
 ## The dashboard
 
-`BrightenUpMartDashboardApp` puts both halves of the workshop on one screen and makes the assumptions
-editable, so the analysis can be re-run live in front of an audience.
+`BrightenUpMartAnalyticsApp` puts both halves of the workshop side by side on one screen — no tabs — and
+makes the assumptions editable, so the analysis can be re-run live in front of an audience. It mirrors
+the solution script's pipeline, and reads the same `data/TransportOpt.xlsx` scenario rather than
+hardcoding costs or shares.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Brighten Up Mart — Business Analytics Dashboard       [New random draw] │
-├───────────────────────────────┬──────────────────────────────────────────┤
-│ 1.  SALES FORECAST            │ 2.  TRANSPORTATION OPTIMIZATION          │
-│ Horizon [6▲▼]  View [ ▼ ]     │ Shipping month [ ▼ ]  [Reload]           │
-│ Focus month [ ▼ ] [Reset]     │  ┌────────────────────────────────────┐  │
-│                               │  │ editable tableau: costs + Supply   │  │
-│   blue  ─o─  actual sales     │  │ column + Demand row                │  │
-│   red   ─◆─  forecast         │  ├────────────────────────────────────┤  │
-│   grey  ┆    focus month      │  │ heatmap of the optimal ship plan   │  │
-│                               │  └────────────────────────────────────┘  │
-│                               │  ● Optimal   Naive   Savings             │
-└───────────────────────────────┴──────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  Brighten Up Mart — Forecast and Distribution Planner                      │
+├──────────────────────────────────┬─────────────────────────────────────────┤
+│  Sales Forecast                  │  Transport Optimization                 │
+│  Horizon [6▲▼]  Style [ ▼ ]      │  Shipping month [ ▼ ]  [Reload Excel]   │
+│  Focus marketing month [ ▼ ]     │  Demand 947 units | supply 976 (+3%)    │
+│  [Reset]                         │  ┌───────────────┬────────────────────┐ │
+│                                  │  │ supply share %│ demand share %     │ │
+│   blue  ─o─  actual sales        │  └───────────────┴────────────────────┘ │
+│   red   --+  forecast            │  ┌────────────────────────────────────┐ │
+│   grey  ┆    focus month         │  │ editable 3×5 shipping-cost table   │ │
+│                                  │  ├────────────────────────────────────┤ │
+│                                  │  │ heatmap of the optimal ship plan   │ │
+│                                  │  └────────────────────────────────────┘ │
+│  Horizon 6 months. Promotion …   │  Optimized | Naive first-come | Savings │
+│                                  │  ● Optimal plan uses 7 of 15 routes.    │
+└──────────────────────────────────┴─────────────────────────────────────────┘
 ```
 
-> **Note.** The app is an independent implementation of the same pipeline and still draws marketing spend
-> from `mode(BUS.MarketingSpend)` over the whole series, where the live script now uses the median of the
-> trailing 13 months. The two therefore report slightly different figures for the same month.
+The window is `[28 30 1480 762]`, sized to fit a 1536×864 logical screen.
 
-### Component 1 — Sales forecast
+### Left — Sales forecast
 
-- **Forecast horizon** (1–24 months) re-runs the recursive forecast.
-- **View** switches between two framings of the same numbers:
-  - *Full history + forecast* — all 48 months, forecast appended (blue line/circles for actuals, red
-    line/diamonds for the forecast).
-  - *Year over year + forecast* — one Jan–Dec axis comparing the current year, the previous year, and
-    the forecast. A horizon past 12 months spans more than one calendar year, so each forecast year gets
-    its own line (2026 solid, 2027 dark dashed) instead of overwriting the axis.
-- **Focus marketing month** applies the same promotional push as the live script — the chosen month's
-  spend is replaced by `round(mode + 2*std)`. It defaults to April, matching the script's `focusmkt = 4`.
-  A dashed marker labels the month on the chart, and the label beside the dropdown reports the spend and
-  **the resulting lift in units**, so the effect is visible rather than assumed.
-- **Reset** clears the push (focus month back to `(none)`) and redraws the unboosted forecast, so the
-  before/after is a one-click toggle. At the default 6-month horizon that is 937 units in April boosted
-  against 877 unboosted — THB 864,100 of shipping cost against THB 808,700.
-- **New random draw** redraws the Poisson marketing-spend series.
+- **Forecast horizon** (1–12 months) re-runs the recursive forecast. The cap is 12 on purpose:
+  `SameMonthLastYear` is read from `BUS.Sales(end-12+h)`, exactly as `createForecast` does, so the app's
+  numbers stay identical to the taught script's.
+- **Plot style** switches between two framings of the same numbers — *Continuous timeline* (all 48 months
+  of history with the forecast appended) and *Year over year* (every calendar year overlaid on a shared
+  1–12 month axis, oldest year palest, the forecast year in red).
+- **Focus marketing month** applies the same promotional push as the live script: the chosen month's
+  spend is replaced by `round(median + 2*std)` over the trailing 13 months. It defaults to **None**, and
+  picking a month also **moves the shipping month across to match** — a promotion is the reason to ship
+  extra stock. The status line beneath the axes reports the boosted spend against the normal median.
+- **Reset** restores the opening state: horizon 6, continuous timeline, focus None, shipping month 1, and
+  costs *and* shares reloaded from Excel.
+- `rng(7)` is re-seeded on every forecast, so the marketing-spend draw is reproducible and changing the
+  horizon never reshuffles the months you were already looking at.
 
-Marketing spend is cached across the full 24-month span, so changing the horizon does **not** reshuffle
-the months you were already looking at. `SameMonthLastYear` is read from a growing `[history; forecast]`
-series, which is what lets horizons run past 12 months.
-
-### Component 2 — Transportation optimization
+### Right — Transport optimization
 
 - **Shipping month** picks which forecast month to ship. Demand and DC capacity are re-derived from that
   month and the plan re-solves. The list tracks the forecast horizon, keeping your choice when it is
-  still in range and otherwise falling back to April.
-- The **tableau** is fully editable — 3 DC rows × 5 store columns of unit costs, plus a shaded `Supply`
-  column and `Demand` row. Any edit re-solves immediately.
+  still in range.
+- **Both share tables are editable** — DC supply share and store demand share, shown as percentages. The
+  shares are **rescaled to 100% before the split**, so an edit actually moves stock instead of being
+  handed straight back by the rounding correction. Rescaling is a no-op at the Excel defaults, so the
+  taught numbers are unchanged; when the shares no longer total 100% the lamp turns amber and the status
+  line says so out loud rather than quietly changing what you typed.
+- The **shipping-cost table** is editable cell by cell (3 DC rows × 5 store columns). Any edit re-solves
+  immediately, and a negative or non-finite entry is rejected with the previous value restored.
 - Whenever the forecast changes, **demand and supply re-derive automatically** so the shipping plan can
-  never silently disagree with the forecast above it. Your **cost edits are preserved** through that
-  refresh; **Reload from forecast** is what restores the original scenario costs.
-- The **heatmap** shows the optimal plan on an inverted `hot` colormap; unused routes read light, heavy
-  flows dark.
-- The **KPI strip** reports optimized cost, the naive benchmark, savings and percentage, with a lamp for
-  solver status.
+  never silently disagree with the forecast beside it. Your **cost and share edits survive** that
+  refresh; **Reload Excel** is what restores the original scenario.
+- The **heatmap** shows the optimal plan on the `sky` colormap — a busier route is a deeper blue.
+- The **KPI strip** reports optimized cost, the naive first-come benchmark, and the savings with its
+  percentage, beside a lamp for solver status.
 
-Infeasible input — total supply below total demand — shows a red lamp and an explanatory message rather
-than throwing an error, so a mistyped cell during a demo is recoverable.
+Infeasible input — supply below demand, or shares driven negative — shows a red lamp and an explanatory
+message rather than throwing an error, so a mistyped cell during a demo is always recoverable.
+
+### Reference numbers
+
+| State | Demand / supply | Optimized | Naive | Savings |
+|---|---|---|---|---|
+| As it opens — horizon 6, no promotion, Jan 2026 | 800 / 824 | THB 745,200 | THB 1,562,000 | THB 816,800 (52.3%) |
+| Focus month April, shipping April — matches the script | 947 / 976 | THB 881,900 | THB 1,854,700 | THB 972,800 (52.5%) |
